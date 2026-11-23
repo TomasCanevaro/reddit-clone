@@ -3,7 +3,7 @@
 A learning project built incrementally with Spring Boot, React, TypeScript,
 Tailwind CSS, and PostgreSQL.
 
-## Current step: frontend connection screen
+## Current step: posts table and database migrations
 
 The backend uses Java 25, Spring Boot, Maven, and PostgreSQL 18. The frontend
 uses React, TypeScript, Tailwind CSS, and Vite. The first screen checks the
@@ -37,7 +37,8 @@ sudo docker compose exec postgres psql -U reddit -d reddit_clone
 ```
 
 Inside psql, run `SELECT current_database();`. Use `\dt` to list tables
-(none exist yet) and `\q` to exit.
+and `\q` to exit. After starting the backend or running its tests, you should
+see `posts` and `flyway_schema_history`.
 
 `sudo docker compose stop` stops PostgreSQL. Start it again with
 `sudo docker compose up -d --wait`. `sudo docker compose down` removes the
@@ -112,9 +113,10 @@ cd frontend
 npm run build
 ```
 
-Start PostgreSQL first. The integration test starts the Spring application
-context and executes `SELECT current_database()` through JDBC against the
-local development database. It does not modify data.
+Start PostgreSQL first. The integration tests start the Spring application,
+apply pending migrations, verify the database connection, and check post
+storage and title constraints. Test inserts are rolled back; migrations
+remain applied. Run these tests against the local development database.
 
 ```bash
 cd backend
@@ -141,7 +143,38 @@ cd backend
 Spring Web provides HTTP support and the embedded web server. Actuator supplies
 the health endpoint without a custom controller. Spring JDBC provides database
 access and a connection pool; the PostgreSQL JDBC driver translates those
-requests into PostgreSQL's protocol. Tables and schema migrations come later.
+requests into PostgreSQL's protocol. Flyway manages database schema migrations.
+
+### Understand the first migration
+
+`backend/src/main/resources/db/migration/V1__create_posts.sql` creates:
+
+| Column | Meaning |
+| --- | --- |
+| `id` | Database-generated numeric primary key |
+| `title` | Required title, up to 300 characters; empty or space-only values are rejected |
+| `body` | Text content; defaults to an empty string |
+| `created_at` | Timestamp with time zone, set automatically on insertion |
+
+An index on creation time and ID supports the upcoming newest-first feed.
+Authors, communities, and sample posts will be added in later steps.
+
+Spring Boot runs Flyway on startup using our existing database connection.
+Flyway discovers `V1__create_posts.sql`: `V1` is the version, the double
+underscore separates it from the description. It records applied migrations
+and their checksums in `flyway_schema_history`. Restarting the backend does
+not recreate the table. Once a migration is shared/applied, add a new version
+(such as `V2__...sql`) for changes instead of editing the old file.
+
+After restarting the backend, inspect the schema from the repository root:
+
+```bash
+sudo docker compose exec postgres psql -U reddit -d reddit_clone -c '\d posts'
+sudo docker compose exec postgres psql -U reddit -d reddit_clone -c 'SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;'
+```
+
+These migrations manage structure; they do not yet add production data or
+expose a posts API.
 
 ## Development workflow
 
