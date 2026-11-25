@@ -103,6 +103,11 @@ development server is not a production server.
 - Use the browser Network panel's throttling to observe the loading state;
   the refresh button is disabled until the request completes.
 - Check a narrow browser window and keyboard navigation to the refresh button.
+- Use the header's theme toggle to switch light/dark mode, then reload to
+  verify persistence. Check post cards and loading, empty, and error states
+  in both themes. The first visit uses your system preference; explicit choices
+  are stored under `reddit-clone-theme` in localStorage. When storage is
+  unavailable, the toggle still works for the current page.
 
 The feed loads once on mount and on refresh, without polling. It renders text
 as plain React content, preserves body line breaks, and wraps long content.
