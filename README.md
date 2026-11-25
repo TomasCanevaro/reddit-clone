@@ -3,11 +3,10 @@
 A learning project built incrementally with Spring Boot, React, TypeScript,
 Tailwind CSS, and PostgreSQL.
 
-## Current step: read-only posts API
+## Current step: read-only post feed
 
 The backend uses Java 25, Spring Boot, Maven, and PostgreSQL 18. The frontend
-uses React, TypeScript, Tailwind CSS, and Vite. The first screen checks the
-backend's health, including its database connection.
+uses React, TypeScript, Tailwind CSS, and Vite. The feed displays the newest posts from the backend API.
 
 ### Start PostgreSQL
 
@@ -86,23 +85,28 @@ Open http://localhost:5173. `npm ci` installs the versions recorded in
 `frontend/package-lock.json`; it is needed after cloning or dependency changes.
 Vite updates the page as you edit the source files.
 
-The browser requests `/actuator/health` from Vite on port 5173. Vite proxies
-that request to Spring Boot on port 8080, and Spring Boot checks PostgreSQL
-on port 5433. This development proxy avoids cross-origin browser requests.
-Production hosting will need its own routing to the backend; the Vite dev
-server is not a production server.
+The browser requests `/api/posts` from Vite on port 5173. Vite proxies
+that request to Spring Boot on port 8080, and Spring Boot queries PostgreSQL
+on port 5433. Production hosting will need its own backend routing; the Vite
+development server is not a production server.
 
-### Review the connection screen
+### Review the post feed
 
-- With both services running, the screen should show **Connected**.
-- Stop the backend with Ctrl+C, then click **Check again**. The screen should
-  show **Unavailable** after the request fails or times out.
-- Restart the backend and check again to recover.
-- With the backend running, stop PostgreSQL using `sudo docker compose stop
-  postgres`. Checking again should show **Needs attention**. Restart it with
-  `sudo docker compose up -d --wait` and check again to recover.
+- Start PostgreSQL, Spring Boot, and Vite. Seed posts using the command below
+  if desired. The page should display post titles, bodies, and local dates,
+  newest first.
+- Click **Refresh** to fetch the latest list again.
+- Stop the backend, then refresh. The page should display an error and a
+  **Try again** button. Restart the backend and retry to recover.
+- For an empty database, the page shows **No conversations yet**. Do not
+  delete existing data just to test this state.
+- Use the browser Network panel's throttling to observe the loading state;
+  the refresh button is disabled until the request completes.
+- Check a narrow browser window and keyboard navigation to the refresh button.
 
-The screen checks once on load and when you click the button; it does not poll.
+The feed loads once on mount and on refresh, without polling. It renders text
+as plain React content, preserves body line breaks, and wraps long content.
+The health endpoint is still available at http://localhost:8080/actuator/health.
 
 ### Run checks
 
@@ -133,7 +137,9 @@ cd backend
 - `backend/src/main/resources/application.properties`: application settings.
 - `backend/src/test/java/`: automated tests.
 - `backend/target/`: generated build output, excluded from Git.
-- `frontend/src/App.tsx`: connection request, typed UI states, and screen.
+- `frontend/src/App.tsx`: feed request lifecycle and loading, empty, error, and success states.
+- `frontend/src/posts/api.ts`: API response types, validation, and fetch function.
+- `frontend/src/posts/PostCard.tsx`: reusable display for one post.
 - `frontend/src/main.tsx`: mounts the React application into the HTML page.
 - `frontend/src/index.css`: imports Tailwind and sets global styles.
 - `frontend/vite.config.ts`: React/Tailwind plugins and development proxy.
@@ -207,7 +213,8 @@ Request flow:
 
 There is no service layer yet because this endpoint has no business rules
 beyond reading posts. We can introduce one when those rules appear.
-The React screen still shows connection status; displaying posts comes next.
+The React screen displays this endpoint's posts. There are no post detail,
+voting, commenting, or creation controls yet.
 
 `PostApiTests` verifies the HTTP response with real database queries: empty
 results, field mapping, newest-first order, timestamp ties, and the 50-post

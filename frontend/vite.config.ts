@@ -8,6 +8,11 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        timeout: 10_000,
+        proxyTimeout: 10_000,
+      },
       '/actuator/health': {
         target: 'http://localhost:8080',
         timeout: 10_000,
