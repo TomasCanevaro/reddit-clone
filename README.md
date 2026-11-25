@@ -3,7 +3,7 @@
 A learning project built incrementally with Spring Boot, React, TypeScript,
 Tailwind CSS, and PostgreSQL.
 
-## Current step: posts table and database migrations
+## Current step: read-only posts API
 
 The backend uses Java 25, Spring Boot, Maven, and PostgreSQL 18. The frontend
 uses React, TypeScript, Tailwind CSS, and Vite. The first screen checks the
@@ -173,8 +173,46 @@ sudo docker compose exec postgres psql -U reddit -d reddit_clone -c '\d posts'
 sudo docker compose exec postgres psql -U reddit -d reddit_clone -c 'SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;'
 ```
 
-These migrations manage structure; they do not yet add production data or
-expose a posts API.
+These migrations manage structure; sample content is loaded separately.
+
+### Read posts through the API
+
+Restart the backend after updating the code, then run:
+
+```bash
+curl http://localhost:8080/api/posts
+```
+
+The endpoint returns a JSON array containing the 50 newest posts, ordered by
+`created_at DESC, id DESC`. If no posts exist, it returns `[]` with HTTP 200.
+This initial limit bounds the response; pagination will be added later.
+Each post contains `id`, `title`, `body`, and `createdAt` (an ISO-8601 timestamp).
+
+To load optional sample posts, run from the repository root:
+
+```bash
+sudo docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U reddit -d reddit_clone < backend/dev/seed-posts.sql
+```
+
+The script skips sample titles that already exist when rerun sequentially.
+It is intended for local development, and never runs automatically in production.
+
+Request flow:
+
+1. Spring routes `GET /api/posts` to `posts/PostController.java`.
+2. The controller calls `PostRepository.findLatest()`.
+3. The repository uses `JdbcTemplate` to query PostgreSQL and map rows to
+   `Post` records. Spring provides dependencies through their constructors.
+4. Spring serializes the returned list into JSON using Jackson.
+
+There is no service layer yet because this endpoint has no business rules
+beyond reading posts. We can introduce one when those rules appear.
+The React screen still shows connection status; displaying posts comes next.
+
+`PostApiTests` verifies the HTTP response with real database queries: empty
+results, field mapping, newest-first order, timestamp ties, and the 50-post
+limit. Its inserts and deletes occur inside transactions rolled back after
+each test, preserving existing posts (identity sequences can still advance).
 
 ## Development workflow
 
