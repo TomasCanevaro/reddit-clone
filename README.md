@@ -3,7 +3,7 @@
 A learning project built incrementally with Spring Boot, React, TypeScript,
 Tailwind CSS, and PostgreSQL.
 
-## Current step: read-only post feed
+## Current step: individual post API
 
 The backend uses Java 25, Spring Boot, Maven, and PostgreSQL 18. The frontend
 uses React, TypeScript, Tailwind CSS, and Vite. The feed displays the newest posts from the backend API.
@@ -225,6 +225,29 @@ voting, commenting, or creation controls yet.
 results, field mapping, newest-first order, timestamp ties, and the 50-post
 limit. Its inserts and deletes occur inside transactions rolled back after
 each test, preserving existing posts (identity sequences can still advance).
+
+### Read an individual post
+
+`GET /api/posts/{id}` returns a single post with `id`, `title`, `body`, and
+`createdAt`. Restart Spring Boot after pulling code changes, then use an ID
+returned by the feed:
+
+```bash
+curl -i http://localhost:8080/api/posts/61
+```
+
+Replace `61` with an existing post ID. An existing post returns HTTP 200
+and a JSON object. A missing post returns HTTP 404 with an empty body.
+Nonnumeric IDs or values outside Java's `long` range return HTTP 400.
+
+`@PathVariable` converts the URL segment into a `long`. The repository uses
+`WHERE id = ?` with a bound parameter and returns an `Optional<Post>`.
+`ResponseEntity.of(...)` maps a present post to 200 and absence to 404.
+Both repository queries share a row mapper so their post fields stay aligned.
+No database migration is needed for this endpoint.
+
+API tests cover a found post, a missing post, a nonnumeric ID, and an ID
+outside the supported numeric range. The frontend detail page comes next.
 
 ## Development workflow
 

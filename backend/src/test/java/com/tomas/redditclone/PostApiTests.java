@@ -71,6 +71,40 @@ class PostApiTests {
                 .andExpect(jsonPath("$[49].title").value("Post 2"));
     }
 
+    @Test
+    void returnsRequestedPostAsJson() throws Exception {
+        var timestamp = OffsetDateTime.parse("2026-01-01T10:00:00Z");
+        insertPost("Another post", "Other body", timestamp);
+        Long id = insertPost("Requested post", "Full post body", timestamp);
+
+        mockMvc.perform(get("/api/posts/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("application/json"))
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.title").value("Requested post"))
+                .andExpect(jsonPath("$.body").value("Full post body"))
+                .andExpect(jsonPath("$.createdAt").value("2026-01-01T10:00:00Z"));
+    }
+
+    @Test
+    void returnsNotFoundForMissingPost() throws Exception {
+        mockMvc.perform(get("/api/posts/1"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(""));
+    }
+
+    @Test
+    void rejectsNonNumericPostId() throws Exception {
+        mockMvc.perform(get("/api/posts/not-a-number"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectsPostIdOutsideLongRange() throws Exception {
+        mockMvc.perform(get("/api/posts/9223372036854775808"))
+                .andExpect(status().isBadRequest());
+    }
+
     private Long insertPost(String title, String body, OffsetDateTime createdAt) {
         return jdbcTemplate.queryForObject(
                 "INSERT INTO posts (title, body, created_at) VALUES (?, ?, ?) RETURNING id",
