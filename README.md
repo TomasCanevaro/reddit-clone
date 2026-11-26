@@ -3,7 +3,7 @@
 A learning project built incrementally with Spring Boot, React, TypeScript,
 Tailwind CSS, and PostgreSQL.
 
-## Current step: individual post API
+## Current step: individual post page
 
 The backend uses Java 25, Spring Boot, Maven, and PostgreSQL 18. The frontend
 uses React, TypeScript, Tailwind CSS, and Vite. The feed displays the newest posts from the backend API.
@@ -122,6 +122,13 @@ cd frontend
 npm run build
 ```
 
+Frontend API response-handling tests (Node.js 24+):
+
+```bash
+cd frontend
+npm test
+```
+
 Start PostgreSQL first. The integration tests start the Spring application,
 apply pending migrations, verify the database connection, and check post
 storage and title constraints. Test inserts are rolled back; migrations
@@ -142,7 +149,9 @@ cd backend
 - `backend/src/main/resources/application.properties`: application settings.
 - `backend/src/test/java/`: automated tests.
 - `backend/target/`: generated build output, excluded from Git.
-- `frontend/src/App.tsx`: feed request lifecycle and loading, empty, error, and success states.
+- `frontend/src/App.tsx`: shared header and page routes.
+- `frontend/src/posts/FeedPage.tsx`: feed request lifecycle and loading, empty, error, and success states.
+- `frontend/src/posts/PostPage.tsx`: individual post fetching, retry, and missing-post states.
 - `frontend/src/posts/api.ts`: API response types, validation, and fetch function.
 - `frontend/src/posts/PostCard.tsx`: reusable display for one post.
 - `frontend/src/main.tsx`: mounts the React application into the HTML page.
@@ -218,8 +227,8 @@ Request flow:
 
 There is no service layer yet because this endpoint has no business rules
 beyond reading posts. We can introduce one when those rules appear.
-The React screen displays this endpoint's posts. There are no post detail,
-voting, commenting, or creation controls yet.
+The React feed displays this endpoint's posts. There are no voting,
+commenting, or creation controls yet.
 
 `PostApiTests` verifies the HTTP response with real database queries: empty
 results, field mapping, newest-first order, timestamp ties, and the 50-post
@@ -247,7 +256,36 @@ Both repository queries share a row mapper so their post fields stay aligned.
 No database migration is needed for this endpoint.
 
 API tests cover a found post, a missing post, a nonnumeric ID, and an ID
-outside the supported numeric range. The frontend detail page comes next.
+outside the supported numeric range.
+
+### Open a post in the frontend
+
+React Router maps `/` to `FeedPage` and `/posts/:id` to `PostPage`. `Link`
+updates the URL without reloading the whole application. `useParams` reads
+the post ID; the page fetches `/api/posts/{id}` rather than relying on feed
+data, so direct links and page reloads also work. The header and theme toggle
+are shared across routes. Unrecognized routes display a page-not-found view.
+
+Review with the backend and frontend running:
+
+- Click a post title in the feed. Check the full title, body, date, and URL.
+- Use **Back to feed**, browser back/forward, and the header home link.
+- Reload the post URL or open it in another tab.
+- Open `/posts/0` for a missing post and `/posts/abc` for an invalid ID.
+- Open an unknown URL such as `/missing` for the page-not-found view.
+- Stop the backend, reload a post page, and check the retry state. Restart
+  the backend and use **Try again** to recover.
+- Verify both themes and keyboard navigation through post links.
+
+The API helper returns `null` specifically for 404, throws for request failures
+or malformed data, and preserves abort signals. Requests are cancelled on
+navigation and time out after 12 seconds. Frontend tests cover the API helper;
+the routing and visual states also require browser review.
+
+For future production hosting, route frontend URLs such as `/posts/61` back
+to `index.html` while routing `/api` to Spring Boot. Vite handles this fallback
+during development. A frontend not-found view does not change the development
+server's HTTP response code to 404.
 
 ## Development workflow
 

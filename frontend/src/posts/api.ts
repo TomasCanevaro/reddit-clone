@@ -23,3 +23,12 @@ export async function fetchPosts(signal: AbortSignal): Promise<Post[]> {
   }
   return data
 }
+
+export async function fetchPost(id: string, signal: AbortSignal): Promise<Post | null> {
+  const response = await fetch(`/api/posts/${encodeURIComponent(id)}`, { signal, cache: 'no-store' })
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error('Post request failed')
+  const data: unknown = await response.json()
+  if (!isPost(data)) throw new Error('Unexpected post response')
+  return data
+}
