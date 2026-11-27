@@ -3,7 +3,7 @@
 A learning project built incrementally with Spring Boot, React, TypeScript,
 Tailwind CSS, and PostgreSQL.
 
-## Current step: individual post page
+## Current step: users table
 
 The backend uses Java 25, Spring Boot, Maven, and PostgreSQL 18. The frontend
 uses React, TypeScript, Tailwind CSS, and Vite. The feed displays the newest posts from the backend API.
@@ -286,6 +286,48 @@ For future production hosting, route frontend URLs such as `/posts/61` back
 to `index.html` while routing `/api` to Spring Boot. Vite handles this fallback
 during development. A frontend not-found view does not change the development
 server's HTTP response code to 404.
+
+### Users schema
+
+`V2__create_users.sql` creates the `users` table. Flyway applies it on the
+next backend startup or integration test run, after V1.
+
+| Column | Meaning |
+| --- | --- |
+| `id` | Database-generated numeric primary key |
+| `username` | 3–20 ASCII letters, digits, underscores, or hyphens |
+| `password_hash` | Required, nonblank encoded password value, up to 255 characters |
+| `created_at` | Timestamp with time zone, generated on insertion |
+
+The unique index on `lower(username)` prevents duplicate names regardless
+of case while preserving the original spelling. The registration API will
+use these same username rules. There is no email field or account API yet.
+
+Password hashing is a one-way transformation; login will verify a submitted
+password against the saved hash. We will implement this with Spring Security's
+password encoder in the registration step. The database checks that the value
+is present, but cannot prove it is a secure password hash. The schema tests
+use an explicit placeholder; it is not a real account credential.
+
+Start PostgreSQL and run the backend tests to apply and verify V2:
+
+```bash
+sudo docker compose up -d --wait
+cd backend
+./mvnw test
+```
+
+From the repository root, inspect the table and migration history:
+
+```bash
+sudo docker compose exec postgres psql -U reddit -d reddit_clone -c '\d users'
+sudo docker compose exec postgres psql -U reddit -d reddit_clone -c 'SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;'
+```
+
+`UsersSchemaTests` verifies storage, generated IDs/timestamps, duplicate and
+case-insensitive usernames, username format, and required password hashes.
+Test rows are rolled back. The existing posts schema and API are unchanged;
+we will link posts to authors when we add authenticated posting.
 
 ## Development workflow
 
