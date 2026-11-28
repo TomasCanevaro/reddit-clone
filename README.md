@@ -3,7 +3,7 @@
 A learning project built incrementally with Spring Boot, React, TypeScript,
 Tailwind CSS, and PostgreSQL.
 
-## Current step: users table
+## Current step: registration API
 
 The backend uses Java 25, Spring Boot, Maven, and PostgreSQL 18. The frontend
 uses React, TypeScript, Tailwind CSS, and Vite. The feed displays the newest posts from the backend API.
@@ -301,11 +301,11 @@ next backend startup or integration test run, after V1.
 
 The unique index on `lower(username)` prevents duplicate names regardless
 of case while preserving the original spelling. The registration API will
-use these same username rules. There is no email field or account API yet.
+uses these same username rules. There is no email field yet.
 
 Password hashing is a one-way transformation; login will verify a submitted
-password against the saved hash. We will implement this with Spring Security's
-password encoder in the registration step. The database checks that the value
+password against the saved hash. Registration uses Spring Security's
+password encoder. The database checks that the value
 is present, but cannot prove it is a secure password hash. The schema tests
 use an explicit placeholder; it is not a real account credential.
 
@@ -328,6 +328,64 @@ sudo docker compose exec postgres psql -U reddit -d reddit_clone -c 'SELECT vers
 case-insensitive usernames, username format, and required password hashes.
 Test rows are rolled back. The existing posts schema and API are unchanged;
 we will link posts to authors when we add authenticated posting.
+
+### Register an account
+
+`POST /api/auth/register` accepts a JSON object with `username` and `password`.
+The username must match the schema's 3–20 character rule. Passwords must be
+nonblank and 12–128 characters long. Passwords are not trimmed or otherwise
+modified; spaces and Unicode are allowed. No special-character or uppercase
+composition rule is imposed.
+
+After restarting Spring Boot, create a local demo account:
+
+```bash
+curl -i http://localhost:8080/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"DemoUser","password":"local-demo-passphrase"}'
+```
+
+Use this public demo password only for local practice. This request persists
+an account. Success returns HTTP 201 and JSON containing only `id`, `username`,
+and `createdAt`. Registration does not log the user in or create a session.
+
+Repeat with `DemoUser` or `demouser` to receive HTTP 409. Try a username such
+as `ab`, a short password, or missing fields to receive HTTP 400. Validation
+errors use `application/problem+json` and include an `errors` object keyed by
+field name, containing messages rather than rejected values. Malformed JSON
+also returns 400 with a generic message. No raw password or stored hash is
+included in a registration response.
+
+How registration works:
+
+1. `RegistrationController` parses the JSON into `RegistrationRequest`.
+   `@Valid` applies Bean Validation constraints before invoking the service.
+2. `RegistrationService` hashes the password through a `PasswordEncoder` bean.
+   This is our first service layer: it coordinates account-creation rules
+   separately from HTTP handling and SQL.
+3. `UserRepository` inserts with bound parameters and `ON CONFLICT
+   (lower(username)) DO NOTHING`. The unique index resolves duplicate names
+   even during simultaneous requests. A conflict becomes HTTP 409; other
+   database failures are not misreported as username conflicts.
+4. The repository returns a `UserResponse` containing only public fields.
+
+Hashing uses Spring Security's Argon2id implementation with Bouncy Castle,
+a random 16-byte salt, a 32-byte hash, 19 MiB memory, two iterations, and
+one lane. The encoded value stores the algorithm parameters and salt needed
+for future password verification. Identical passwords produce different
+stored values. This configuration follows the [OWASP Argon2id minimum](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html);
+see [Spring Security password storage](https://docs.spring.io/spring-security/reference/features/authentication/password-storage.html).
+The work factor should be evaluated on the eventual deployment hardware.
+
+The dependencies add validation and password encoding, without installing
+the Spring Security web filter chain yet. Login, logout, sessions, and React
+account forms come in subsequent checkpoints. No schema migration is needed
+for registration because V2 already provides the necessary columns.
+
+`RegistrationApiTests` exercises real PostgreSQL inserts, salted hash
+verification, duplicate names (including case differences), password length
+boundaries, Unicode/spaces, invalid fields, malformed JSON, and credential
+exclusion from responses. Its test rows are rolled back after each test.
 
 ## Development workflow
 
