@@ -3,7 +3,7 @@
 A learning project built incrementally with Spring Boot, React, TypeScript,
 Tailwind CSS, and PostgreSQL.
 
-## Current step: session login and logout
+## Current step: React account forms
 
 The backend uses Java 25, Spring Boot, Maven, and PostgreSQL 18. The frontend
 uses React, TypeScript, Tailwind CSS, and Vite. The feed displays the newest posts from the backend API.
@@ -385,7 +385,7 @@ The work factor should be evaluated on the eventual deployment hardware.
 No schema migration is needed for registration because V2 already provides
 the necessary columns. With session authentication enabled, registration
 also requires a CSRF token; the preceding commands obtain one and retain its
-associated session cookie. React account forms come in the next checkpoint.
+associated session cookie. The React account forms perform these steps automatically.
 
 `RegistrationApiTests` exercises real PostgreSQL inserts, salted hash
 verification, duplicate names (including case differences), password length
@@ -459,6 +459,55 @@ login, session ID rotation, hash erasure, `/me`, generic credential errors,
 missing/invalid tokens, token rotation, logout, and public reads. Registration
 tests now include CSRF so they continue to check validation and persistence
 through the security filters.
+
+### Use accounts in the browser
+
+With PostgreSQL, Spring Boot, and Vite running, open http://localhost:5173.
+The header checks `/api/auth/me` when the app loads. Signed-out visitors see
+**Log in** and **Sign up**; signed-in visitors see their username and **Log out**.
+A failed account check displays a retry control and does not prevent public
+post browsing.
+
+Review these flows:
+
+1. Open **Sign up** (`/register`) and create a unique local account. Check
+   username/password requirements and accessible field labels. Successful
+   registration takes you to `/login` with a success notice and username filled
+   in. It does not sign you in automatically.
+2. Enter a wrong password and verify the generic error. Then log in correctly.
+   The app returns to the feed and displays your username in the header.
+3. Reload or open a post. Your session should remain active and both light and
+   dark themes should still work. Signed-in users visiting login/register are
+   redirected to the feed.
+4. Log out and reload. The header should show the signed-out controls.
+5. Try registering the same username with different capitalization. Check the
+   conflict message. Invalid fields show inline server errors when received,
+   in addition to native browser validation.
+6. Stop the backend and submit a form or reload the app. Check the error/retry
+   behavior, then restart it and recover. A failed logout keeps the displayed
+   account rather than falsely reporting success.
+7. Check keyboard navigation, password-manager autocomplete, and a narrow
+   browser window in both themes.
+
+`AuthProvider` shares account state across the header and routes with React
+Context. It restores the session from `/me`, and ignores stale restoration
+responses after login/logout. `AuthPage` implements login and registration;
+`AuthControls` handles the header. The API helper in `auth/api.ts` obtains a
+fresh CSRF token before every POST, sends cookies using same-origin requests,
+and retries a CSRF rejection once with a new token. Login uses a URL-encoded
+body, registration uses JSON, and logout accepts an empty 204 response.
+
+Only the public profile is held in React state. Passwords stay in the current
+form and request body; neither credentials nor session tokens are written to
+localStorage. The browser manages the HttpOnly session cookie. Requests have
+timeouts, duplicate form submissions are disabled, and server field errors
+are associated with the corresponding inputs. Error summaries receive focus.
+
+Run `npm test` from `frontend/` for API-helper tests, and `npm run build` for
+TypeScript checking and the production build. Tests cover account restoration,
+cookies, request formats, CSRF renewal/retry, validation/conflict errors,
+logout, and response validation. The browser checklist above verifies the
+interactive forms and navigation.
 
 ## Development workflow
 
