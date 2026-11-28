@@ -27,4 +27,15 @@ public class UserRepository {
                 row.getObject("created_at", OffsetDateTime.class)), username, passwordHash)
                 .stream().findFirst();
     }
+
+    public Optional<AccountPrincipal> findForLogin(String username) {
+        return jdbcTemplate.query("""
+                SELECT id, username, password_hash, created_at
+                FROM users
+                WHERE lower(username) = lower(?)
+                """, (row, rowNumber) -> new AccountPrincipal(
+                new UserResponse(row.getLong("id"), row.getString("username"),
+                        row.getObject("created_at", OffsetDateTime.class)),
+                row.getString("password_hash")), username).stream().findFirst();
+    }
 }

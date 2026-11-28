@@ -22,6 +22,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -46,7 +47,7 @@ class RegistrationApiTests {
     @Test
     void registersUserAndStoresOnlyAVerifiableHash() throws Exception {
         String username = uniqueUsername();
-        mockMvc.perform(post("/api/auth/register").contentType("application/json")
+        mockMvc.perform(post("/api/auth/register").with(csrf()).contentType("application/json")
                         .content(request(username, PASSWORD)))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith("application/json"))
@@ -85,7 +86,7 @@ class RegistrationApiTests {
         String originalHash = hashFor(username);
         String duplicate = differentCase ? username.toUpperCase(Locale.ROOT) : username;
 
-        mockMvc.perform(post("/api/auth/register").contentType("application/json")
+        mockMvc.perform(post("/api/auth/register").with(csrf()).contentType("application/json")
                         .content(request(duplicate, "another-long-password")))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
@@ -101,7 +102,7 @@ class RegistrationApiTests {
     @MethodSource("invalidRequests")
     void rejectsInvalidInputWithoutCreatingAccount(String json) throws Exception {
         Long before = jdbcTemplate.queryForObject("SELECT count(*) FROM users", Long.class);
-        mockMvc.perform(post("/api/auth/register").contentType("application/json").content(json))
+        mockMvc.perform(post("/api/auth/register").with(csrf()).contentType("application/json").content(json))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
                 .andExpect(jsonPath("$.errors").isMap())
@@ -145,7 +146,7 @@ class RegistrationApiTests {
     @ParameterizedTest
     @ValueSource(strings = {"{", "null", "[]", "{\"username\":{},\"password\":\"secret\"}"})
     void rejectsMalformedJsonWithSafeError(String json) throws Exception {
-        mockMvc.perform(post("/api/auth/register").contentType("application/json").content(json))
+        mockMvc.perform(post("/api/auth/register").with(csrf()).contentType("application/json").content(json))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("Provide a valid registration JSON object."))
                 .andExpect(content().string(not(containsString("secret"))));
@@ -157,7 +158,7 @@ class RegistrationApiTests {
     }
 
     private void register(String username, String password) throws Exception {
-        mockMvc.perform(post("/api/auth/register").contentType("application/json")
+        mockMvc.perform(post("/api/auth/register").with(csrf()).contentType("application/json")
                         .content(request(username, password)))
                 .andExpect(status().isCreated());
     }

@@ -3,7 +3,7 @@
 A learning project built incrementally with Spring Boot, React, TypeScript,
 Tailwind CSS, and PostgreSQL.
 
-## Current step: registration API
+## Current step: session login and logout
 
 The backend uses Java 25, Spring Boot, Maven, and PostgreSQL 18. The frontend
 uses React, TypeScript, Tailwind CSS, and Vite. The feed displays the newest posts from the backend API.
@@ -340,7 +340,12 @@ composition rule is imposed.
 After restarting Spring Boot, create a local demo account:
 
 ```bash
+AUTH_COOKIES=$(mktemp)
+AUTH_CSRF=$(curl -fsS -c "$AUTH_COOKIES" -b "$AUTH_COOKIES" http://localhost:8080/api/auth/csrf | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+
 curl -i http://localhost:8080/api/auth/register \
+  -b "$AUTH_COOKIES" -c "$AUTH_COOKIES" \
+  -H "X-CSRF-TOKEN: $AUTH_CSRF" \
   -H 'Content-Type: application/json' \
   -d '{"username":"DemoUser","password":"local-demo-passphrase"}'
 ```
@@ -377,15 +382,83 @@ stored values. This configuration follows the [OWASP Argon2id minimum](https://c
 see [Spring Security password storage](https://docs.spring.io/spring-security/reference/features/authentication/password-storage.html).
 The work factor should be evaluated on the eventual deployment hardware.
 
-The dependencies add validation and password encoding, without installing
-the Spring Security web filter chain yet. Login, logout, sessions, and React
-account forms come in subsequent checkpoints. No schema migration is needed
-for registration because V2 already provides the necessary columns.
+No schema migration is needed for registration because V2 already provides
+the necessary columns. With session authentication enabled, registration
+also requires a CSRF token; the preceding commands obtain one and retain its
+associated session cookie. React account forms come in the next checkpoint.
 
 `RegistrationApiTests` exercises real PostgreSQL inserts, salted hash
 verification, duplicate names (including case differences), password length
 boundaries, Unicode/spaces, invalid fields, malformed JSON, and credential
 exclusion from responses. Its test rows are rolled back after each test.
+
+### Session login, current user, and logout
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /api/auth/csrf` | Public; returns `headerName` and `token`, creating a session if needed |
+| `POST /api/auth/login` | URL-encoded `username` and `password`; returns the public profile on success |
+| `GET /api/auth/me` | Returns the signed-in profile, or 401 when signed out |
+| `POST /api/auth/logout` | Requires CSRF; invalidates the session, clears the cookie, returns 204 |
+
+Login uses Spring Security's form-login filter. Unlike registration, it
+accepts `application/x-www-form-urlencoded`, not JSON. Username matching is
+case-insensitive. Unknown accounts and incorrect passwords both return 401
+with the same generic message. Security failures use `application/problem+json`;
+missing or invalid CSRF tokens return 403.
+
+Continue in the same terminal after the registration example (if `DemoUser`
+already exists, use the password supplied when creating that local account):
+
+```bash
+curl -i http://localhost:8080/api/auth/login \
+  -b "$AUTH_COOKIES" -c "$AUTH_COOKIES" \
+  -H "X-CSRF-TOKEN: $AUTH_CSRF" \
+  --data-urlencode 'username=DemoUser' \
+  --data-urlencode 'password=local-demo-passphrase'
+
+curl -i -b "$AUTH_COOKIES" http://localhost:8080/api/auth/me
+```
+
+Expect HTTP 200 for login and `/me`, with only `id`, `username`, and `createdAt`.
+The `JSESSIONID` cookie identifies a server-side session; it does not contain
+the password or profile. Spring changes the session ID on login, saves the
+authenticated principal, and erases its password hash. The cookie is HttpOnly
+and SameSite=Lax. Sessions expire after 30 minutes of inactivity and are
+stored in memory, so restarting the backend signs users out. Set
+`SESSION_COOKIE_SECURE=true` when deploying behind HTTPS.
+
+CSRF tokens bind state-changing requests to the session. Obtain a fresh one
+after login and after logout: authentication transitions clear the old token.
+GET requests must not change account state. Using a header keeps the token
+out of URLs; keep the session cookie with every request as well.
+
+```bash
+AUTH_CSRF=$(curl -fsS -c "$AUTH_COOKIES" -b "$AUTH_COOKIES" http://localhost:8080/api/auth/csrf | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+
+curl -i -X POST http://localhost:8080/api/auth/logout \
+  -b "$AUTH_COOKIES" -c "$AUTH_COOKIES" \
+  -H "X-CSRF-TOKEN: $AUTH_CSRF"
+
+curl -i -b "$AUTH_COOKIES" http://localhost:8080/api/auth/me
+rm "$AUTH_COOKIES"
+```
+
+Expect 204 for logout, then 401 for `/me`. A POST without a CSRF token should
+return 403 even for public endpoints such as registration and login.
+
+`SecurityConfiguration` defines the public routes, session handling, JSON
+authentication errors, and standard login/logout handlers. `UserDetailsService`
+loads an `AccountPrincipal` from PostgreSQL; Spring's authentication provider
+verifies its password with our existing Argon2id encoder. `AuthController`
+exposes the CSRF token and public account profile. Post reads and health remain
+public; unlisted routes are denied until explicitly enabled.
+
+`SessionAuthTests` uses tokens obtained from the real CSRF endpoint, exercising
+login, session ID rotation, hash erasure, `/me`, generic credential errors,
+missing/invalid tokens, token rotation, logout, and public reads. Registration
+tests now include CSRF so they continue to check validation and persistence
+through the security filters.
 
 ## Development workflow
 
